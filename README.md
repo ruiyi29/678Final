@@ -1,2 +1,2 @@
 # 678Final
-Analysis on Diabetes Prediction
+Analysis on Wine Quality
