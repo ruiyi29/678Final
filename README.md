@@ -1,2 +1,2 @@
 # 678Final
-Analysis on Diabetes, Hypertension and Stroke Prediction
+Analysis on Diabetes Prediction
