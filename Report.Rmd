@@ -1,0 +1,183 @@
+---
+title: "678 Project"
+output: html_document
+date: "2022-12-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Abstract
+The topic of the report is the world happiness level. Nowadays, people are focusing more and more on their mental health situations. Therefore, it is a good idea to use some elements to measure the average happiness level of countries around the world. In this report, I will use multilevel model to find the correlation between happiness level of different countries and see which of the element make largest contribution to the happiness score. 
+
+## Introduction
+Happiness score is one of the methods to measure the feelings of populations around the world. There are many perspectives we need to consider. Specific explanations are included in the following table. (Table is shown in the Report PDF)
+
+## Method
+
+### EDA
+```{r}
+library(tidyverse)
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(rstanarm)
+library(corrplot)
+```
+
+```{r}
+happiness <- read.csv("https://raw.githubusercontent.com/ruiyi29/678Final/main/2016.csv")
+```
+
+```{r}
+happiness <- happiness %>%
+  mutate(vgdp = round(Economy..GDP.per.Capita./(Happiness.Score - Dystopia.Residual) * 100, 2),
+         vfamily = round(Family/(Happiness.Score - Dystopia.Residual) * 100, 2),
+         vlife = round(Health..Life.Expectancy./(Happiness.Score - Dystopia.Residual) * 100, 2),
+         vfreedom = round(Freedom/(Happiness.Score - Dystopia.Residual) * 100, 2),
+         vgenerosity = round(Generosity/(Happiness.Score - Dystopia.Residual) * 100, 2),
+         vcorruption = round(Trust..Government.Corruption./(Happiness.Score - Dystopia.Residual) * 100, 2))
+happiness %>%
+  group_by(Region) %>%
+  summarise(gdp = mean(vgdp),
+            family = mean(vfamily),
+            life = mean(vlife),
+            freedom = mean(vfreedom),
+            generosity = mean(vgenerosity),
+            corruption = mean(vcorruption)) %>%
+  pivot_longer(c(gdp, family, life,freedom,generosity, corruption),
+               names_to = "f", values_to = "value") %>%
+  ggplot(aes(reorder(f, value), value, color = Region)) +
+  geom_line(aes(group = Region)) +
+  labs(title = "Rate of contribution to happiness score (region)")
+```
+In general, contribution of six factors is similar for most of the regions. 
+
+The following plots show specifically on how each factor influences the happiness score based on regions. 
+
+```{r}
+ggplot(data = happiness) + 
+  aes(x = Economy..GDP.per.Capita. + 1, y = Happiness.Score) + 
+  geom_point(aes(color = factor(Region)), size = 1) + 
+  geom_smooth(aes(color = factor(Region)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(x = "GDP", y = "Happiness Score")
+```
+
+
+```{r}
+ggplot(data = happiness) + 
+  aes(x = Family + 1, y = Happiness.Score) + 
+  geom_point(aes(color = factor(Region)), size = 1) + 
+  geom_smooth(aes(color = factor(Region)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(x = "Family", y = "Happiness Score")
+```
+For most regions, GDP and family situation have positive effects on the happiness score, which means that higher GDP land better family lead to higher happiness level on average. Although slopes vary, most of them are upwards. 
+
+
+```{r}
+ggplot(data = happiness) + 
+  aes(x = Freedom + 1, y = Happiness.Score) + 
+  geom_point(aes(color = factor(Region)), size = 1) + 
+  geom_smooth(aes(color = factor(Region)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(x = "Freedom", y = "Happiness Score")
+```
+
+```{r}
+ggplot(data = happiness) + 
+  aes(x = Trust..Government.Corruption. + 1, y = Happiness.Score) + 
+  geom_point(aes(color = factor(Region)), size = 1) + 
+  geom_smooth(aes(color = factor(Region)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(x = "Government Trust Level", y = "Happiness Score")
+```
+For the two factors freedom and government trust level, situations are quite similar as the two factors above. For the factor of government trust level, all slopes are going upwards. This means that for all regions in the study, the more people trust their government, the happier they are. 
+
+```{r}
+ggplot(data = happiness) + 
+  aes(x = Generosity + 1, y = Happiness.Score) + 
+  geom_point(aes(color = factor(Region)), size = 1) + 
+  geom_smooth(aes(color = factor(Region)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(x = "Generosity", y = "Happiness Score")
+```
+```{r}
+ggplot(data = happiness) + 
+  aes(x = Health..Life.Expectancy. + 1, y = Happiness.Score) + 
+  geom_point(aes(color = factor(Region)), size = 1) + 
+  geom_smooth(aes(color = factor(Region)), method = "lm", se = FALSE, formula = 'y ~ x') + 
+  labs(x = "Life Expectancy", y = "Happiness Score")
+```
+The first plot on this page shows a different conclusion for the factor generosity compared to the rest factors. This factor has negative effects on happiness score for more than half of the regions. 
+The second plot shows that life expectancy has similar situation as the factor government trust level. 
+
+
+### Model Fitting
+Since regions are divided into groups, here I use the multilevel model to fit the dataset. 
+```{r}
+model <- lmer(Happiness.Score~1+Generosity+Trust..Government.Corruption.+Freedom+Health..Life.Expectancy.+Family+Economy..GDP.per.Capita.+(1+Generosity|Region)+(1+Trust..Government.Corruption.|Region)+(1+Freedom|Region)+(1+Health..Life.Expectancy.|Region)+(1+Family|Region)+(1+Economy..GDP.per.Capita.|Region),data = happiness)
+summary(model)
+```
+
+## Result
+ 
+### Model Coefficients
+Happiness score = 2.35+0.27*(Generosity)+0.79*(Trust Government Corruption) +0.91*(Freedom)+0.94*(Life Expectancy)+1.22*(Family)+0.99(GDP)
+
+### Model Validation
+```{r}
+par(mfrow=c(1,2))
+plot(predict(model),resid(model),col="darkgreen",main = "Residual Plot",xlab = "fitted",ylab = "residual")
+abline(0,0,col="violet")
+qqnorm(resid(model),col="darkgreen",main = "Q-Q Plot")
+qqline(resid(model),distribution = qnorm,col="violet")
+```
+The residual plot shows that the average residual value is close to zero.  For the Q-Q Plot, most of the points are either very close to the line or on the line. Therefore,it makes sense. 
+
+
+## Discussion
+Except for the multilevel model, I also tried some other models including linear model and logistic regression model. However, since the factors are not definitely independent with each other, finally I chose the multilevel model. One potential problem is that the dataset does not contain a very large quantity of observations. If there are more observations, the model and results might be more accurate and convincing. 
+
+## Appendix
+
+```{r}
+happiness %>%
+  group_by(Region) %>%
+  summarise(mHappy = mean(Happiness.Score)) %>%
+  ggplot(aes(reorder(Region, mHappy), mHappy)) +
+  geom_point() +
+  theme_bw() +
+  coord_flip() +
+  labs(title = "Happiness Score by Regions 2016",
+       y = "Average happiness score")
+
+```
+
+```{r}
+happiness %>%
+  summarise(gdp = mean(vgdp),
+            family = mean(vfamily),
+            life = mean(vlife),
+            freedom = mean(vfreedom),
+            generosity = mean(vgenerosity),
+            corruption = mean(vcorruption)) %>%
+  pivot_longer(c(gdp, family, life,freedom,generosity, corruption),
+               names_to = "f", values_to = "value") %>%
+  ggplot(aes(reorder(f, value), value)) +
+  geom_bar(stat = "identity", fill = "purple", width = 0.5, alpha = 0.8) +
+  geom_text(aes(label = paste0(round(value, 2), "%"), vjust = -0.5)) +
+  theme_bw() +
+  labs(title = "Percentage of contribution to happiness score (factors)")
+```
+
+
+In order to check correlation among the variables and the output Happiness score, I made a new data frame only containing variables measured numerically. 
+
+```{r}
+Happiness <- happiness %>% dplyr::select(Happiness.Score,Dystopia.Residual,Generosity,Trust..Government.Corruption.,Freedom,Health..Life.Expectancy.,Family,Economy..GDP.per.Capita.) %>% data.frame()
+corrplot(cor(Happiness))
+```
+
+
+
+
+
